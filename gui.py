@@ -23,7 +23,7 @@ class ParsePalApp:
         self.df = None
         self.filtered_df = None
         self.preview_windows = {}
-        self.last_previewed_media = None  # <-- Add this line
+        self.last_previewed_media = None
         
         self.setup_ui()
         self.tree.bind("<<TreeviewSelect>>", self.on_message_select)
@@ -73,7 +73,6 @@ class ParsePalApp:
             label.pack()
         except Exception as e:
             tk.Label(preview_win, text=f"Failed to load media:\n{e}").pack()
-
 
     def setup_ui(self):
         notebook = ttk.Notebook(self.root)
@@ -201,7 +200,7 @@ class ParsePalApp:
                 self.contact_listbox.insert(tk.END, c)
 
             self.apply_filters()
-            self.update_media_tab()  # <-- Add this line!
+            self.update_media_tab()
             messagebox.showinfo("Success", "Parsed and loaded data from the selected database.")
         except Exception as e:
             messagebox.showerror("Error", f"Error parsing DB: {e}")
@@ -253,7 +252,7 @@ class ParsePalApp:
         self.update_stats_tab()
 
         # Update media tab with filtered data
-        self.update_media_tab()  # <-- Add this line!
+        self.update_media_tab()
 
     def clear_filters(self):
         self.search_var.set("")

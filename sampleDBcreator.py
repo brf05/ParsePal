@@ -8,7 +8,7 @@ def make_sample_whatsapp_db(filename="sample_dbs/msgstore.db", message_count=100
     media_folder = os.path.join(os.path.dirname(filename), "media")
     os.makedirs(media_folder, exist_ok=True)
 
-    # Place some sample images in media_folder before running this script
+    # Place some sample images in media_folder before running this script (important)
     sample_images = [os.path.join(media_folder, f) for f in os.listdir(media_folder) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
     if not sample_images:
         print(f"⚠️  No images found in {media_folder}. Add some .jpg or .png files for media messages.")
