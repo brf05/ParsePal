@@ -22,6 +22,8 @@ class ParsePalApp:
         self.end_date_var = tk.StringVar()
         self.df = None
         self.filtered_df = None
+        self.preview_windows = {}
+        self.last_previewed_media = None  # <-- Add this line
         
         self.setup_ui()
         self.tree.bind("<<TreeviewSelect>>", self.on_message_select)
@@ -30,19 +32,37 @@ class ParsePalApp:
         selected = self.tree.selection()
         if not selected or self.filtered_df is None:
             return
-        
+
         index = self.tree.index(selected[0])
         row = self.filtered_df.iloc[index]
+        media_path = row.get("media_path")
 
-        media_path = row.get("media_path") # or actual media column name
+        # Only open if media_path is valid and different from last previewed
         if media_path and os.path.isfile(media_path):
-            self.show_media_preview(media_path)
+            if (media_path != self.last_previewed_media or
+                media_path not in self.preview_windows or
+                not self.preview_windows[media_path].winfo_exists()):
+                self.show_media_preview(media_path)
+                self.last_previewed_media = media_path
         else:
-            pass  # Handle case where media is not available / clear preview or do nothing
+            self.last_previewed_media = None
 
     def show_media_preview(self, filepath):
+        # If already open, bring to front
+        if filepath in self.preview_windows and self.preview_windows[filepath].winfo_exists():
+            self.preview_windows[filepath].lift()
+            return
+
         preview_win = tk.Toplevel(self.root)
         preview_win.title("Media Preview")
+        self.preview_windows[filepath] = preview_win  # Track window
+
+        def on_close():
+            if filepath in self.preview_windows:
+                del self.preview_windows[filepath]
+            preview_win.destroy()
+
+        preview_win.protocol("WM_DELETE_WINDOW", on_close)
 
         try:
             img = Image.open(filepath)
@@ -311,13 +331,12 @@ class ParsePalApp:
             self.show_media_preview(media_path)
 
     def update_media_tab(self):
-        if self.df is None:
+        # Use filtered_df instead of df for consistency with filters
+        if self.filtered_df is None:
             self.media_df = pd.DataFrame()
         else:
-            self.df['media_path'] = self.df['media_path'].astype(str).str.strip()
-            self.media_df = self.df[self.df['media_path'].notnull() & (self.df['media_path'] != '')].copy()
-            print("Total rows:", len(self.df), "Media rows:", len(self.media_df))
-            print(self.media_df[['media_path', 'media_type', 'media_mime']].head())
+            self.filtered_df['media_path'] = self.filtered_df['media_path'].astype(str).str.strip()
+            self.media_df = self.filtered_df[self.filtered_df['media_path'].notnull() & (self.filtered_df['media_path'] != '')].copy()
 
         for row in self.media_tree.get_children():
             self.media_tree.delete(row)
@@ -330,6 +349,34 @@ class ParsePalApp:
                 row.get('media_type', ''),
                 row.get('media_mime', '')
             ))
+
+        # Clear previous summary widgets
+        for widget in getattr(self, 'media_summary_widgets', []):
+            widget.destroy()
+        self.media_summary_widgets = []
+
+        # Media count per contact
+        if not self.media_df.empty:
+            counts = self.media_df['Contact'].value_counts()
+            summary = "Media count per contact:\n"
+            for contact, count in counts.items():
+                summary += f"{contact}: {count}\n"
+        else:
+            summary = "No media found for current filter."
+
+        label = tk.Label(self.tab_media, text=summary, justify="left", anchor="w")
+        label.pack(anchor="nw", padx=10, pady=(5, 0))
+        self.media_summary_widgets = [label]
+
+        # Prioritize selected contacts at the top
+        selected_indices = self.contact_listbox.curselection()
+        if selected_indices:
+            selected_contacts = [self.contact_listbox.get(i) for i in selected_indices]
+            self.media_df['priority'] = self.media_df['Contact'].apply(lambda c: 0 if c in selected_contacts else 1)
+            self.media_df = self.media_df.sort_values(['priority', 'Contact', 'timestamp'])
+            self.media_df = self.media_df.drop(columns=['priority'])
+        else:
+            self.media_df = self.media_df.sort_values(['Contact', 'timestamp'])
 
 def run_app():
     root = tk.Tk()
