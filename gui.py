@@ -141,11 +141,11 @@ class ParsePalApp:
         ttk.Button(btn_frame, text="Clear Filters", command=self.clear_filters).pack(side="left", padx=5)
 
         # Treeview for messages
-        columns = ("Contact", "Message", "Timestamp", "Direction")
+        columns = ("Contact", "Message", "Timestamp", "Direction", "Media")
         self.tree = ttk.Treeview(frame, columns=columns, show='headings', height=15)
         for col in columns:
             self.tree.heading(col, text=col)
-            self.tree.column(col, width=200)
+            self.tree.column(col, width=150)
         self.tree.grid(row=6, column=0, columnspan=3, pady=10, sticky="nsew")
 
         # Scrollbar for Treeview
@@ -175,6 +175,7 @@ class ParsePalApp:
 
         # Media preview on double-click
         self.media_tree.bind("<Double-1>", self.on_media_select)
+        ttk.Button(self.tab_media, text="Show in Conversation", command=self.show_media_in_conversation).pack(anchor="ne", padx=10, pady=(0, 5))
 
     def browse_folder(self):
         folder = filedialog.askdirectory()
@@ -216,7 +217,7 @@ class ParsePalApp:
         if search_text:
             df_filtered = df_filtered[df_filtered['Message'].str.lower().str.contains(search_text, na=False)]
 
-        # Keyword frequency for stats (store keyword)
+        # Keyword frequency count (store keyword)
         self.keyword = self.keyword_var.get().lower()
 
         # Direction filter
@@ -268,11 +269,14 @@ class ParsePalApp:
             self.tree.delete(row)
 
         for _, row in self.filtered_df.iterrows():
+            has_media = bool(row.get('media_path')) and str(row.get('media_path')).strip().lower() not in ('', 'none')
+            media_icon = "🖼️" if has_media else ""
             self.tree.insert("", "end", values=(
                 row.get('Contact', ''),
                 row.get('Message', ''),
                 row.get('timestamp', ''),
-                row.get('Direction', '')
+                row.get('Direction', ''),
+                media_icon
             ))
 
     def update_stats_tab(self):
@@ -330,13 +334,39 @@ class ParsePalApp:
         if media_path and os.path.isfile(media_path):
             self.show_media_preview(media_path)
 
+    def show_media_in_conversation(self):
+        selected = self.media_tree.selection()
+        if not selected or self.media_df is None or self.filtered_df is None:
+            return
+        index = self.media_tree.index(selected[0])
+        media_row = self.media_df.iloc[index]
+        # Find the index in filtered_df that matches this media (by timestamp and contact)
+        match = self.filtered_df[
+            (self.filtered_df['timestamp'] == media_row['timestamp']) &
+            (self.filtered_df['Contact'] == media_row['Contact'])
+        ]
+        if not match.empty:
+            msg_index = match.index[0]
+            # Find the corresponding item in the treeview and select it
+            for item in self.tree.get_children():
+                vals = self.tree.item(item, 'values')
+                if vals and vals[0] == media_row['Contact'] and vals[2] == str(media_row['timestamp']):
+                    self.tree.selection_set(item)
+                    self.tree.see(item)
+                    self.root.nametowidget(self.root.winfo_children()[0]).select(0)  # Switch to Messages tab
+                    break
+
     def update_media_tab(self):
-        # Use filtered_df instead of df for consistency with filters
+        # Only show rows with actual media
         if self.filtered_df is None:
             self.media_df = pd.DataFrame()
         else:
-            self.filtered_df['media_path'] = self.filtered_df['media_path'].astype(str).str.strip()
-            self.media_df = self.filtered_df[self.filtered_df['media_path'].notnull() & (self.filtered_df['media_path'] != '')].copy()
+            # Only keep rows with a non-empty, non-None media_path
+            self.media_df = self.filtered_df[
+                self.filtered_df['media_path'].notnull() &
+                (self.filtered_df['media_path'].astype(str).str.strip() != '') &
+                (self.filtered_df['media_path'].astype(str).str.lower() != 'none')
+            ].copy()
 
         for row in self.media_tree.get_children():
             self.media_tree.delete(row)
